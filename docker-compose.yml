@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: proactive-agent-postgres
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent123
+      POSTGRES_DB: agentdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agentdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.26
+    container_name: proactive-agent-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/password123
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  api:
+    build: .
+    container_name: proactive-agent-api
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEO4J_URI=neo4j://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password123
+      - POSTGRES_URL=postgresql+psycopg2://agent:agent123@postgres:5432/agentdb
+    ports:
+      - "8000:8000"
+    volumes:
+    - .:/app
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /tmp:/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+  
+
+volumes:
+  postgres_data:
+  neo4j_data:

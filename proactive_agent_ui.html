@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>proactive-agent</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg0: #0a0a0c; --bg1: #111116; --bg2: #18181f; --bg3: #1f1f28; --bg4: #28283a;
+    --border: #2a2a3a; --border-hi: #3d3d5c;
+    --purple: #9d7fe8; --purple-dim: #6b52b0; --purple-glow: rgba(157,127,232,0.12); --purple-glow2: rgba(157,127,232,0.06);
+    --text: #f0eeff; --text-sec: #a09ac0; --text-dim: #5a5470;
+    --green: #5af0a0; --green-dim: #1a4030;
+    --red: #f06070; --red-dim: #3a1520;
+    --amber: #f0b850; --amber-dim: #3a2a10;
+    --mono: 'JetBrains Mono', monospace; --sans: 'Space Grotesk', sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg0); color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6; overflow: hidden; }
+  .shell { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 42px 1fr; height: 100vh; overflow: hidden; }
+
+  /* TOPBAR */
+  .topbar { grid-column: 1/-1; background: var(--bg1); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 12px; }
+  .topbar-logo { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: 0.05em; color: var(--purple); }
+  .topbar-logo .icon { width: 20px; height: 20px; border: 1.5px solid var(--purple); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+  .topbar-sep { flex: 1; }
+  .topbar-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); }
+  .dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.idle { background: var(--amber); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--bg1); border-right: 1px solid var(--border); padding: 16px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .sidebar-section { padding: 4px 16px 2px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); margin-top: 10px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 16px; cursor: pointer; color: var(--text-sec); font-size: 12px; letter-spacing: 0.02em; border-left: 2px solid transparent; transition: all 0.15s; user-select: none; }
+  .nav-item:hover { background: var(--bg2); color: var(--text); }
+  .nav-item.active { color: var(--purple); border-left-color: var(--purple); background: var(--purple-glow2); }
+  .nav-item .ni { font-size: 13px; width: 16px; text-align: center; }
+  .sidebar-bottom { margin-top: auto; padding: 12px 16px; }
+  .version-badge { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 10px; color: var(--text-dim); }
+  .version-badge span { color: var(--purple); font-weight: 500; }
+
+  /* MAIN */
+  .main { background: var(--bg0); overflow: hidden; display: flex; flex-direction: column; }
+  .panel { display: none; height: 100%; overflow: hidden; flex-direction: column; }
+  .panel.active { display: flex; }
+  .panel-header { padding: 18px 24px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .panel-title { font-size: 15px; font-weight: 500; color: var(--text); font-family: var(--sans); }
+  .panel-sub { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+  .panel-body { padding: 20px 24px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+
+  /* INPUTS */
+  .field-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+  .term-input { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; padding: 9px 12px; outline: none; transition: border-color 0.15s; }
+  .term-input:focus { border-color: var(--purple-dim); }
+  .term-input::placeholder { color: var(--text-dim); }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 6px; font-family: var(--mono); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid; transition: all 0.15s; letter-spacing: 0.02em; }
+  .btn-primary { background: var(--purple-glow); border-color: var(--purple-dim); color: var(--purple); }
+  .btn-primary:hover { background: rgba(157,127,232,0.2); border-color: var(--purple); }
+  .btn-danger { background: var(--red-dim); border-color: #6a2030; color: var(--red); }
+  .btn-danger:hover { background: rgba(240,96,112,0.2); }
+  .btn-ghost { background: var(--bg2); border-color: var(--border); color: var(--text-sec); }
+  .btn-ghost:hover { border-color: var(--border-hi); color: var(--text); }
+
+  /* WATCH PANEL */
+  .watch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .stat-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .stat-value { font-size: 22px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat-value.purple { color: var(--purple); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+
+  /* FEED */
+  .feed-box { background: var(--bg1); border: 1px solid var(--border); border-radius: 8px; flex: 1; min-height: 200px; overflow: hidden; display: flex; flex-direction: column; }
+  .feed-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+  .feed-scroll { flex: 1; overflow-y: auto; padding: 8px 0; font-size: 11px; max-height: 280px; }
+  .feed-entry { display: grid; grid-template-columns: 70px 55px 1fr; gap: 8px; padding: 4px 14px; animation: fadeIn 0.3s ease; }
+  .feed-entry:hover { background: var(--bg2); }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+  .fe-time { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .fe-tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 500; text-align: center; align-self: center; }
+  .fe-tag.pass { background: var(--green-dim); color: var(--green); }
+  .fe-tag.fail { background: var(--red-dim); color: var(--red); }
+  .fe-tag.warn { background: var(--amber-dim); color: var(--amber); }
+  .fe-tag.info { background: var(--purple-glow); color: var(--purple); }
+  .fe-msg { color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fe-msg strong { color: var(--text); font-weight: 500; }
+
+  /* LOGS */
+  .log-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .log-table-wrap { background: var(--bg1); border: 1px solid var(--border); border-radius: 8px; overflow: auto; flex: 1; min-height: 0; }
+  table.log-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .log-table thead { position: sticky; top: 0; background: var(--bg2); z-index: 1; }
+  .log-table th { padding: 9px 12px; text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .log-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-sec); vertical-align: middle; }
+  .log-table tr:last-child td { border-bottom: none; }
+  .log-table tr:hover td { background: var(--bg2); color: var(--text); }
+  .log-table td.mono-file { color: var(--text); font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: 500; }
+  .badge.pass { background: var(--green-dim); color: var(--green); }
+  .badge.fail { background: var(--red-dim); color: var(--red); }
+  .badge.refactor { background: var(--purple-glow); color: var(--purple); }
+  .badge.bugfix { background: var(--amber-dim); color: var(--amber); }
+
+  /* SQL */
+  .sql-editor-wrap { background: var(--bg1); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .sql-editor-bar { padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
+  textarea.sql-area { width: 100%; min-height: 110px; background: var(--bg1); border: none; color: var(--text); font-family: var(--mono); font-size: 12px; line-height: 1.7; padding: 12px 14px; outline: none; resize: vertical; }
+  .sql-area::placeholder { color: var(--text-dim); }
+  .sql-results { background: var(--bg1); border: 1px solid var(--border); border-radius: 8px; overflow: auto; flex: 1; min-height: 0; }
+  .sql-results-header { padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; display: flex; gap: 12px; align-items: center; }
+  .result-count { color: var(--purple); font-weight: 500; }
+  table.res-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .res-table th { padding: 8px 12px; text-align: left; font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--bg2); position: sticky; top: 0; }
+  .res-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--text-sec); }
+  .res-table tr:last-child td { border-bottom: none; }
+  .res-table tr:hover td { background: var(--bg2); color: var(--text); }
+
+  /* STATUS */
+  .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .node-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .node-type { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+  .node-count { font-size: 28px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .node-flags { display: flex; gap: 8px; font-size: 10px; }
+  .node-flag-buggy { color: var(--red); }
+  .node-flag-complex { color: var(--amber); }
+  .node-bar { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .node-bar-fill { height: 100%; background: var(--purple); border-radius: 2px; transition: width 0.6s ease; }
+
+  /* UTILS */
+  .empty-state { padding: 40px; text-align: center; color: var(--text-dim); font-size: 12px; }
+  .empty-state .es-icon { font-size: 24px; margin-bottom: 10px; opacity: 0.4; }
+  .kbd { display: inline-block; background: var(--bg3); border: 1px solid var(--border-hi); border-radius: 3px; padding: 1px 5px; font-size: 10px; color: var(--text-dim); }
+  .path-row { display: flex; gap: 8px; align-items: flex-end; }
+  .path-row .term-input { flex: 1; }
+  .scan-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .scrollbar-style::-webkit-scrollbar { width: 4px; height: 4px; }
+  .scrollbar-style::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-style::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+  .error-msg { color: var(--red); font-size: 11px; padding: 6px 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="icon">⬡</div>
+      proactive-agent
+    </div>
+    <div class="topbar-sep"></div>
+    <div class="topbar-status">
+      <div class="dot idle" id="status-dot"></div>
+      <span id="status-text">idle</span>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar scrollbar-style">
+    <div class="sidebar-section">agent</div>
+    <div class="nav-item active" data-panel="watch"><span class="ni">◈</span> watcher</div>
+    <div class="nav-item" data-panel="logs"><span class="ni">≡</span> audit logs</div>
+    <div class="nav-item" data-panel="sql"><span class="ni">⌥</span> sql query</div>
+    <div class="sidebar-section">system</div>
+    <div class="nav-item" data-panel="status"><span class="ni">◎</span> db status</div>
+    <div class="sidebar-bottom">
+      <div class="version-badge">
+        proactive-agent <span>v1.0</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- WATCH PANEL -->
+    <div class="panel active" id="panel-watch">
+      <div class="panel-header">
+        <span style="color:var(--purple);font-size:14px;">◈</span>
+        <span class="panel-title">watcher</span>
+        <span class="panel-sub" id="watch-elapsed"></span>
+      </div>
+      <div class="panel-body scrollbar-style">
+        <div>
+          <div class="field-label">directory / repo path</div>
+          <div class="path-row">
+            <input class="term-input" id="watch-path" type="text" placeholder="/app/my-project" />
+            <button class="btn btn-ghost" id="btn-scan">⟳ scan repo</button>
+            <button class="btn btn-primary" id="btn-toggle-watch">▶ start watch</button>
+          </div>
+          <div class="error-msg" id="watch-error" style="display:none;"></div>
+        </div>
+        <div class="watch-grid">
+          <div class="stat-card">
+            <div class="stat-label">pipeline runs</div>
+            <div class="stat-value purple" id="stat-events">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">passed</div>
+            <div class="stat-value green" id="stat-pass">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">failed</div>
+            <div class="stat-value red" id="stat-fail">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">retries</div>
+            <div class="stat-value" id="stat-retry">0</div>
+          </div>
+        </div>
+        <div class="feed-box">
+          <div class="feed-header">
+            <div class="dot" id="feed-dot"></div>
+            live activity feed
+            <span style="margin-left:auto;cursor:pointer;font-size:10px;" id="btn-clear-feed">clear</span>
+          </div>
+          <div class="feed-scroll scrollbar-style" id="feed-scroll">
+            <div class="empty-state">
+              <div class="es-icon">◌</div>
+              no activity yet — start the watcher to see events
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS PANEL -->
+    <div class="panel" id="panel-logs">
+      <div class="panel-header">
+        <span style="color:var(--purple);font-size:14px;">≡</span>
+        <span class="panel-title">audit logs</span>
+        <span class="panel-sub" id="log-count-label">— entries</span>
+      </div>
+      <div class="panel-body scrollbar-style">
+        <div class="log-controls">
+          <input class="term-input" style="width:200px;" id="log-filter-entity" placeholder="filter by entity..." />
+          <select class="term-input" style="width:140px;" id="log-filter-status">
+            <option value="">all statuses</option>
+            <option value="PASS">pass</option>
+            <option value="FAIL">fail</option>
+          </select>
+          <button class="btn btn-ghost" id="btn-refresh-logs">↺ refresh</button>
+        </div>
+        <div class="log-table-wrap scrollbar-style">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>timestamp</th><th>status</th><th>file</th><th>issue</th>
+                <th>complexity</th><th>tests</th><th>retries</th><th>entities</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SQL PANEL -->
+    <div class="panel" id="panel-sql">
+      <div class="panel-header">
+        <span style="color:var(--purple);font-size:14px;">⌥</span>
+        <span class="panel-title">sql query</span>
+        <span class="panel-sub">audit_ledger</span>
+      </div>
+      <div class="panel-body scrollbar-style">
+        <div>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+            <div class="field-label" style="margin:0;">query</div>
+            <span style="margin-left:auto;font-size:10px;color:var(--text-dim);">
+              <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> to run
+            </span>
+          </div>
+          <div class="sql-editor-wrap">
+            <div class="sql-editor-bar">
+              <span>SELECT only</span>
+              <span id="sql-exec-time" style="color:var(--green);"></span>
+            </div>
+            <textarea class="sql-area scrollbar-style" id="sql-input"
+              placeholder="SELECT * FROM audit_ledger ORDER BY timestamp DESC LIMIT 20;"></textarea>
+          </div>
+          <div class="scan-row" style="margin-top:8px;">
+            <button class="btn btn-primary" id="btn-run-sql">▶ run</button>
+            <button class="btn btn-ghost" id="btn-sql-clear">clear</button>
+            <button class="btn btn-ghost" id="btn-sql-preset-1">recent failures</button>
+            <button class="btn btn-ghost" id="btn-sql-preset-2">complexity fixes</button>
+            <button class="btn btn-ghost" id="btn-sql-preset-3">retry stats</button>
+            <button class="btn btn-ghost" id="btn-sql-preset-4">failure details</button>
+          </div>
+        </div>
+        <div class="sql-results" id="sql-results-box">
+          <div class="sql-results-header">
+            <span>results</span>
+            <span class="result-count" id="sql-result-count"></span>
+          </div>
+          <div id="sql-result-body">
+            <div class="empty-state"><div class="es-icon">⌥</div>run a query to see results</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATUS PANEL -->
+    <div class="panel" id="panel-status">
+      <div class="panel-header">
+        <span style="color:var(--purple);font-size:14px;">◎</span>
+        <span class="panel-title">structure db status</span>
+      </div>
+      <div class="panel-body scrollbar-style">
+        <div class="scan-row">
+          <button class="btn btn-primary" id="btn-refresh-status">↺ refresh</button>
+        </div>
+        <div class="status-grid" id="status-grid"></div>
+        <div>
+          <div class="field-label" style="margin-bottom:8px;">summary</div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;gap:24px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">total buggy</div>
+              <div style="font-size:20px;font-weight:600;color:var(--red);" id="sum-buggy">—</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">high complexity</div>
+              <div style="font-size:20px;font-weight:600;color:var(--amber);" id="sum-complex">—</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">total nodes</div>
+              <div style="font-size:20px;font-weight:600;color:var(--purple);" id="sum-nodes">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// Switches between sidebar panels by toggling .active
+// on both the nav item and the panel div.
+// ═══════════════════════════════════════════════════════
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('panel-' + el.dataset.panel).classList.add('active');
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════
+// LOGS — fetchLogs()
+// Calls GET /api/log with optional entity filter.
+// Maps the API response to the format renderLogs expects.
+// Called on page load and whenever filters change.
+// ═══════════════════════════════════════════════════════
+function renderLogs(rows) {
+  const tbody = document.getElementById('log-tbody');
+  document.getElementById('log-count-label').textContent = rows.length + ' entries';
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:32px;">no entries</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const statusBadge = r.status === 'PASS'
+      ? '<span class="badge pass">✓ pass</span>'
+      : '<span class="badge fail">✗ fail</span>';
+    const issueBadge = r.issue === 'bug'
+      ? '<span class="badge bugfix">bug</span>'
+      : '<span class="badge refactor">complexity</span>';
+    const cx = (r.cx_before && r.cx_after) ? `${r.cx_before} → ${r.cx_after}` : r.cx_before || '—';
+    return `<tr>
+      <td style="color:var(--text-dim);white-space:nowrap;">${r.ts}</td>
+      <td>${statusBadge}</td>
+      <td class="mono-file" title="${r.file}">${r.file}</td>
+      <td>${issueBadge}</td>
+      <td style="color:var(--text-sec);">${cx}</td>
+      <td style="color:${r.tests_passed === r.tests_run ? 'var(--green)' : 'var(--red)'};">${r.tests_passed}/${r.tests_run}</td>
+      <td style="color:${r.retries > 0 ? 'var(--amber)' : 'var(--text-dim)'};">${r.retries}</td>
+      <td style="color:var(--text-dim);font-size:10px;">${(r.entities||[]).join(', ')}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function fetchLogs(entity = '') {
+  try {
+    const params = new URLSearchParams();
+    if (entity) params.append('entity', entity);
+    const res = await fetch(`/api/log?${params}`);
+    const json = await res.json();
+    if (json.status === 'ok') {
+      renderLogs(json.data.map(r => ({
+        ts:           r.timestamp,
+        status:       r.validation_passed ? 'PASS' : 'FAIL',
+        file:         r.affected_file,
+        issue:        r.issue_type,
+        cx_before:    r.complexity_before,
+        cx_after:     r.complexity_after,
+        tests_passed: r.tests_passed,
+        tests_run:    r.tests_run,
+        retries:      r.retry_count,
+        entities:     r.entities || []
+      })));
+    }
+  } catch(e) {
+    console.error('fetchLogs error:', e);
+  }
+}
+
+// Filter inputs call fetchLogs with the entity value
+document.getElementById('log-filter-entity').addEventListener('input', e => {
+  fetchLogs(e.target.value);
+});
+// Status filter is client-side only — filter the rendered rows
+document.getElementById('log-filter-status').addEventListener('change', e => {
+  const val = e.target.value;
+  document.querySelectorAll('#log-tbody tr').forEach(row => {
+    if (!val) { row.style.display = ''; return; }
+    const badge = row.querySelector('.badge');
+    const isPass = badge && badge.classList.contains('pass');
+    row.style.display = (val === 'PASS' ? isPass : !isPass) ? '' : 'none';
+  });
+});
+document.getElementById('btn-refresh-logs').addEventListener('click', () => fetchLogs());
+
+// Load logs when switching to the logs panel
+document.querySelector('[data-panel="logs"]').addEventListener('click', () => fetchLogs());
+
+
+// ═══════════════════════════════════════════════════════
+// WATCHER — start/stop + live feed polling
+//
+// When START is clicked:
+//   1. POST /api/watch/start with the repo path
+//   2. Start a timer showing elapsed time
+//   3. Start polling GET /api/log every 4s
+//      — compare new log count to previous count
+//      — if new entries exist, add them to the live feed
+//      — update the stat counters (events, pass, fail, retries)
+//
+// When STOP is clicked:
+//   1. POST /api/watch/stop
+//   2. Clear the polling interval
+//   3. Reset the UI state
+// ═══════════════════════════════════════════════════════
+let watching = false;
+let watchTimer = null;       // interval for elapsed time display
+let pollTimer = null;        // interval for polling /api/log
+let watchStart = null;
+let knownLogCount = 0;       // tracks how many log entries we've already shown
+let eventCount = 0, passCount = 0, failCount = 0, retryCount = 0;
+
+const btnToggle  = document.getElementById('btn-toggle-watch');
+const feedScroll = document.getElementById('feed-scroll');
+const feedDot    = document.getElementById('feed-dot');
+const statusDot  = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const watchError = document.getElementById('watch-error');
+
+btnToggle.addEventListener('click', async () => {
+  const path = document.getElementById('watch-path').value.trim();
+
+  if (!watching) {
+
+    // validation
+    if (!path) {
+      watchError.textContent = 'enter a directory path first';
+      watchError.style.display = 'block';
+      document.getElementById('watch-path').style.borderColor = 'var(--red)';
+      setTimeout(() => {
+        watchError.style.display = 'none';
+        document.getElementById('watch-path').style.borderColor = '';
+      }, 2000);
+      return;
+    }
+
+    // check if graph exists for this path
+    try {
+      const checkRes  = await fetch(`/api/graph/check?path=${encodeURIComponent(path)}`);
+      const checkJson = await checkRes.json();
+      if (!checkJson.crawled) {
+        addFeedEntry('warn', 'no graph found — scanning repo first...');
+        await fetch('/api/scan', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ path })
+        });
+        addFeedEntry('info', 'scan started in background — starting watcher...');
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        addFeedEntry('info', `graph found — ${checkJson.node_count} nodes`);
+      }
+    } catch(e) {
+      addFeedEntry('warn', 'could not check graph — starting watcher anyway');
+    }
+
+    // start watcher
+    try {
+      const res  = await fetch('/api/watch/start', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ path })
+      });
+      const json = await res.json();
+      if (json.status === 'error') {
+        watchError.textContent = json.message;
+        watchError.style.display = 'block';
+        return;
+      }
+    } catch(e) {
+      watchError.textContent = 'could not connect to API — is the server running?';
+      watchError.style.display = 'block';
+      return;
+    }
+
+    // update UI
+    watching = true;
+    watchError.style.display = 'none';
+    btnToggle.textContent = '■ stop watch';
+    btnToggle.className = 'btn btn-danger';
+    feedDot.classList.add('active');
+    statusDot.className = 'dot active';
+    statusText.textContent = 'watching';
+    watchStart = Date.now();
+    feedScroll.innerHTML = '';
+    addFeedEntry('info', `watching <strong>${path}</strong>`);
+
+    // snapshot current log count
+    try {
+      const res  = await fetch('/api/log?limit=100');
+      const json = await res.json();
+      knownLogCount = json.status === 'ok' ? json.data.length : 0;
+    } catch(e) { knownLogCount = 0; }
+
+    // start timers
+    watchTimer = setInterval(updateElapsed, 1000);
+    pollTimer  = setInterval(pollForUpdates, 4000);
+    knownFeedIdx = 0;
+
+  } else {
+
+    // STOP
+    await fetch('/api/watch/stop', { method: 'POST' });
+    watching = false;
+    btnToggle.textContent = '▶ start watch';
+    btnToggle.className = 'btn btn-primary';
+    feedDot.classList.remove('active');
+    statusDot.className = 'dot idle';
+    statusText.textContent = 'idle';
+    clearInterval(watchTimer);
+    clearInterval(pollTimer);
+    document.getElementById('watch-elapsed').textContent = '';
+    addFeedEntry('info', 'watcher stopped');
+  }
+});
+
+function updateElapsed() {
+  const elapsed = Math.floor((Date.now() - watchStart) / 1000);
+  const m = Math.floor(elapsed / 60), s = elapsed % 60;
+  document.getElementById('watch-elapsed').textContent =
+    `running ${m}m ${String(s).padStart(2,'0')}s`;
+}
+
+// pollForUpdates — called every 4s while watching
+// Fetches the latest 100 log entries and compares count to knownLogCount
+// Any new entries get shown in the feed and update the counters
+let knownFeedIdx = 0;
+
+async function pollForUpdates() {
+  if (!watching) return;
+  try {
+    const res  = await fetch(`/api/feed?since=${knownFeedIdx}`);
+    const json = await res.json();
+
+    json.messages.forEach(m => {
+      addFeedEntry(m.tag, m.msg);
+      if (m.tag === 'pass') {
+        passCount++;
+        document.getElementById('stat-pass').textContent = passCount;
+      }
+      if (m.tag === 'fail') {
+        failCount++;
+        document.getElementById('stat-fail').textContent = failCount;
+      }
+      eventCount++;
+      document.getElementById('stat-events').textContent = eventCount;
+    });
+    knownFeedIdx = json.total;
+  } catch(e) {
+    console.error('poll error:', e);
+  }
+}
+
+function addFeedEntry(tag, msg) {
+  const now = new Date();
+  const ts  = now.toTimeString().slice(0, 8);
+  const div = document.createElement('div');
+  div.className = 'feed-entry';
+  div.innerHTML = `<span class="fe-time">${ts}</span><span class="fe-tag ${tag}">${tag}</span><span class="fe-msg">${msg}</span>`;
+  if (feedScroll.querySelector('.empty-state')) feedScroll.innerHTML = '';
+  feedScroll.appendChild(div);
+  feedScroll.scrollTop = feedScroll.scrollHeight;
+}
+
+document.getElementById('btn-clear-feed').addEventListener('click', () => {
+  feedScroll.innerHTML = '<div class="empty-state"><div class="es-icon">◌</div>feed cleared</div>';
+  eventCount = passCount = failCount = retryCount = 0;
+  ['stat-events','stat-pass','stat-fail','stat-retry'].forEach(id => {
+    document.getElementById(id).textContent = '0';
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════
+// SQL CONSOLE — runSQL()
+// POSTs the query to /api/sql
+// Only SELECT queries are allowed (enforced server-side too)
+// Renders results as a table
+// ═══════════════════════════════════════════════════════
+const SQL_PRESETS = {
+  'btn-sql-preset-1':
+    "SELECT timestamp, affected_file, issue_type, entities_changed, retry_count\nFROM audit_ledger\nWHERE validation_passed = false\nORDER BY timestamp DESC\nLIMIT 20;",
+  'btn-sql-preset-2':
+    "SELECT timestamp, affected_file, issue_type, complexity_before, complexity_after, improvement\nFROM audit_ledger\nWHERE complexity_before IS NOT NULL\nORDER BY timestamp DESC\nLIMIT 20;",
+  'btn-sql-preset-3':
+    "SELECT affected_file, AVG(retry_count) AS avg_retries, MAX(retry_count) AS max_retries, COUNT(*) AS total_runs\nFROM audit_ledger\nGROUP BY affected_file\nORDER BY avg_retries DESC;",
+  'btn-sql-preset-4':
+    "SELECT timestamp, entities_changed, sandbox_output\nFROM audit_ledger\nWHERE validation_passed = false\nORDER BY timestamp DESC\nLIMIT 5;"
+};
+Object.keys(SQL_PRESETS).forEach(id => {
+  document.getElementById(id).addEventListener('click', () => {
+    document.getElementById('sql-input').value = SQL_PRESETS[id];
+  });
+});
+
+document.getElementById('btn-sql-clear').addEventListener('click', () => {
+  document.getElementById('sql-input').value = '';
+  document.getElementById('sql-result-body').innerHTML =
+    '<div class="empty-state"><div class="es-icon">⌥</div>run a query to see results</div>';
+  document.getElementById('sql-result-count').textContent = '';
+  document.getElementById('sql-exec-time').textContent = '';
+});
+
+async function runSQL() {
+  const q = document.getElementById('sql-input').value.trim();
+  if (!q) return;
+
+  const t0 = performance.now();
+  try {
+    const res  = await fetch('/api/sql', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ query: q })
+    });
+    const json = await res.json();
+    const ms   = (performance.now() - t0).toFixed(1);
+    document.getElementById('sql-exec-time').textContent = `${ms}ms`;
+
+    if (json.status === 'error') {
+      document.getElementById('sql-result-body').innerHTML =
+        `<div class="empty-state" style="color:var(--red);">${json.message}</div>`;
+      document.getElementById('sql-result-count').textContent = 'error';
+      return;
+    }
+
+    document.getElementById('sql-result-count').textContent = `${json.count} rows`;
+    const table = `<table class="res-table">
+      <thead><tr>${json.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>${json.rows.map(row =>
+        `<tr>${row.map(v => {
+          const s = String(v);
+          let c = 'var(--text-sec)';
+          if (s === 'true')  c = 'var(--green)';
+          if (s === 'false') c = 'var(--red)';
+          if (s === 'None' || s === 'null') c = 'var(--text-dim)';
+          return `<td style="color:${c}">${s}</td>`;
+        }).join('')}</tr>`
+      ).join('')}</tbody>
+    </table>`;
+    document.getElementById('sql-result-body').innerHTML = table;
+  } catch(e) {
+    document.getElementById('sql-result-body').innerHTML =
+      `<div class="empty-state" style="color:var(--red);">could not reach API</div>`;
+  }
+}
+
+document.getElementById('btn-run-sql').addEventListener('click', runSQL);
+document.getElementById('sql-input').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runSQL();
+});
+
+
+// ═══════════════════════════════════════════════════════
+// STATUS — fetchStatus()
+// Calls GET /api/status to get Neo4j node counts
+// Renders node cards with buggy / high-complexity flags
+// Called on page load and when refresh button is clicked
+// ═══════════════════════════════════════════════════════
+async function fetchStatus() {
+  try {
+    const res  = await fetch('/api/status');
+    const json = await res.json();
+    if (json.status !== 'ok') return;
+
+    const grid = document.getElementById('status-grid');
+    grid.innerHTML = json.data.map(n => {
+      const pct = n.count > 0 ? Math.round((n.buggy / n.count) * 100) : 0;
+      return `<div class="node-card">
+        <div class="node-type">${n.type}</div>
+        <div class="node-count">${n.count}</div>
+        <div class="node-flags">
+          <span class="node-flag-buggy">✗ ${n.buggy} buggy</span>
+          <span class="node-flag-complex">⚑ ${n.high_complexity} complex</span>
+        </div>
+        <div class="node-bar"><div class="node-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('sum-buggy').textContent =
+      json.data.reduce((a, n) => a + n.buggy, 0);
+    document.getElementById('sum-complex').textContent =
+      json.data.reduce((a, n) => a + n.high_complexity, 0);
+    document.getElementById('sum-nodes').textContent =
+      json.data.reduce((a, n) => a + n.count, 0);
+  } catch(e) {
+    console.error('fetchStatus error:', e);
+  }
+}
+
+document.getElementById('btn-refresh-status').addEventListener('click', fetchStatus);
+document.querySelector('[data-panel="status"]').addEventListener('click', fetchStatus);
+
+// ── Initial loads ─────────────────────────────────────
+fetchStatus();
+</script>
+</body>
+</html>
