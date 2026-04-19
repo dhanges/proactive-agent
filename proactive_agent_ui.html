@@ -40,6 +40,7 @@
   .sidebar-bottom { margin-top: auto; padding: 12px 16px; }
   .version-badge { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 10px; color: var(--text-dim); }
   .version-badge span { color: var(--purple); font-weight: 500; }
+  
 
   /* MAIN */
   .main { background: var(--bg0); overflow: hidden; display: flex; flex-direction: column; }
@@ -131,6 +132,34 @@
   .node-bar { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 10px; overflow: hidden; }
   .node-bar-fill { height: 100%; background: var(--purple); border-radius: 2px; transition: width 0.6s ease; }
 
+  /*PROMPT*/
+
+  textarea.prompt-area {
+    width: 100%;
+    min-height: 90px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    padding: 9px 12px;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.15s;
+  }
+  textarea.prompt-area:focus { border-color: var(--purple-dim); }
+  textarea.prompt-area::placeholder { color: var(--text-dim); }
+  .prompt-status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .prompt-status-text {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
   /* UTILS */
   .empty-state { padding: 40px; text-align: center; color: var(--text-dim); font-size: 12px; }
   .empty-state .es-icon { font-size: 24px; margin-bottom: 10px; opacity: 0.4; }
@@ -166,6 +195,8 @@
     <div class="nav-item active" data-panel="watch"><span class="ni">◈</span> watcher</div>
     <div class="nav-item" data-panel="logs"><span class="ni">≡</span> audit logs</div>
     <div class="nav-item" data-panel="sql"><span class="ni">⌥</span> sql query</div>
+    <div class="nav-item" data-panel="prompt"><span class="ni">⌘</span> prompt</div>
+    <div class="nav-item" data-panel="report"><span class="ni">⬡</span> report</div>
     <div class="sidebar-section">system</div>
     <div class="nav-item" data-panel="status"><span class="ni">◎</span> db status</div>
     <div class="sidebar-bottom">
@@ -304,6 +335,42 @@
       </div>
     </div>
 
+    <!-- PROMPT PANEL -->
+  <div class="panel" id="panel-prompt">
+    <div class="panel-header">
+     <span style="color:var(--purple);font-size:14px;">⌘</span>
+     <span class="panel-title">prompt</span>
+     <span class="panel-sub">direct instruction to the agent</span>
+    </div>
+  <div class="panel-body scrollbar-style">
+
+      <div>
+        <div class="field-label">repository path</div>
+       <input class="term-input" id="prompt-path" type="text"
+        placeholder="/app/sample_repo" />
+      </div>
+
+      <div>
+       <div class="field-label">what do you want fixed?</div>
+        <textarea class="prompt-area scrollbar-style" id="prompt-input" rows="4"
+        placeholder="e.g. optimise <function_name> for large inputs"></textarea>
+      </div>
+
+      <div class="prompt-status-row">
+        <button class="btn btn-primary" id="btn-submit-prompt">⌘ run prompt</button>
+        <span class="prompt-status-text" id="prompt-status"></span>
+      </div>
+
+     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:11px;color:var(--text-dim);line-height:1.8;">
+        <div style="color:var(--text-sec);margin-bottom:8px;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;">how it works</div>
+        The agent uses your prompt to identify the relevant file from the dependency graph, then runs the full pipeline — analyst → architect → validator → commit.
+        <br><br>
+       Results appear in <span style="color:var(--purple);">↺ audit logs</span> and the <span style="color:var(--purple);">◈ watcher</span> feed.
+      </div>
+
+    </div>
+  </div>
+
     <!-- STATUS PANEL -->
     <div class="panel" id="panel-status">
       <div class="panel-header">
@@ -334,6 +401,62 @@
         </div>
       </div>
     </div>
+<!-- REPORT PANEL -->
+<div class="panel" id="panel-report">
+  <div class="panel-header">
+    <span style="color:var(--purple);font-size:14px;">⬡</span>
+    <span class="panel-title">analysis report</span>
+    <span class="panel-sub">dead code · zombies · complexity · bugs</span>
+  </div>
+  <div class="panel-body scrollbar-style">
+    <div>
+      <div class="field-label">repository path</div>
+      <div class="path-row">
+        <input class="term-input" id="report-path" type="text"
+          placeholder="/app/sample_repo" />
+        <button class="btn btn-primary" id="btn-generate-report">⬡ generate</button>
+      </div>
+      <div class="error-msg" id="report-error" style="display:none;"></div>
+    </div>
+
+    <div id="report-summary" style="display:none;">
+      <div class="watch-grid">
+        <div class="stat-card">
+          <div class="stat-label">dead functions</div>
+          <div class="stat-value red" id="rep-dead">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">zombie deps</div>
+          <div class="stat-value amber" id="rep-zombies">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">high complexity</div>
+          <div class="stat-value amber" id="rep-complex">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">autonomous fixes</div>
+          <div class="stat-value green" id="rep-fixes">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="report-actions" style="display:none;" class="scan-row">
+      <button class="btn btn-ghost" id="btn-download-report">↓ download .md</button>
+    </div>
+
+    <div class="feed-box" id="report-preview" style="display:none;">
+      <div class="feed-header">
+        <div class="dot active" style="background:var(--purple);"></div>
+        report preview
+      </div>
+      <div class="feed-scroll scrollbar-style" id="report-content"
+        style="max-height:400px;padding:14px;white-space:pre-wrap;
+               font-size:11px;color:var(--text-sec);font-family:var(--mono);">
+      </div>
+    </div>
+
+  </div>
+</div>
 
   </main>
 </div>
@@ -432,6 +555,16 @@ document.getElementById('btn-refresh-logs').addEventListener('click', () => fetc
 // Load logs when switching to the logs panel
 document.querySelector('[data-panel="logs"]').addEventListener('click', () => fetchLogs());
 
+document.getElementById('btn-scan').addEventListener('click', async () => {
+  const path = document.getElementById('watch-path').value.trim();
+  if (!path) return;
+  await fetch('/api/scan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path})
+  });
+  addFeedEntry('info', `scanning <strong>${path}</strong>...`);
+});
 
 // ═══════════════════════════════════════════════════════
 // WATCHER — start/stop + live feed polling
@@ -625,13 +758,13 @@ document.getElementById('btn-clear-feed').addEventListener('click', () => {
 // ═══════════════════════════════════════════════════════
 const SQL_PRESETS = {
   'btn-sql-preset-1':
-    "SELECT timestamp, affected_file, issue_type, entities_changed, retry_count\nFROM audit_ledger\nWHERE validation_passed = false\nORDER BY timestamp DESC\nLIMIT 20;",
+    "SELECT timestamp, trigger_type, affected_file, issue_type, entities_changed, retry_count\nFROM audit_ledger\nWHERE validation_passed = false\nORDER BY timestamp DESC\nLIMIT 20;",
   'btn-sql-preset-2':
-    "SELECT timestamp, affected_file, issue_type, complexity_before, complexity_after, improvement\nFROM audit_ledger\nWHERE complexity_before IS NOT NULL\nORDER BY timestamp DESC\nLIMIT 20;",
+    "SELECT timestamp, trigger_type, affected_file, issue_type, complexity_before, complexity_after, improvement\nFROM audit_ledger\nWHERE complexity_before IS NOT NULL\nORDER BY timestamp DESC\nLIMIT 20;",
   'btn-sql-preset-3':
     "SELECT affected_file, AVG(retry_count) AS avg_retries, MAX(retry_count) AS max_retries, COUNT(*) AS total_runs\nFROM audit_ledger\nGROUP BY affected_file\nORDER BY avg_retries DESC;",
   'btn-sql-preset-4':
-    "SELECT timestamp, entities_changed, sandbox_output\nFROM audit_ledger\nWHERE validation_passed = false\nORDER BY timestamp DESC\nLIMIT 5;"
+    "SELECT timestamp, trigger_type, entities_changed, sandbox_output\nFROM audit_ledger\nWHERE validation_passed = false\nORDER BY timestamp DESC\nLIMIT 5;"
 };
 Object.keys(SQL_PRESETS).forEach(id => {
   document.getElementById(id).addEventListener('click', () => {
@@ -695,7 +828,163 @@ document.getElementById('sql-input').addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runSQL();
 });
 
+//PROMPT PANEL
+document.getElementById('btn-submit-prompt').addEventListener('click', async () => {
+  const path   = document.getElementById('prompt-path').value.trim();
+  const prompt = document.getElementById('prompt-input').value.trim();
+  const status = document.getElementById('prompt-status');
 
+  if (!path || !prompt) {
+    status.textContent = 'enter both path and prompt';
+    status.style.color = 'var(--red)';
+    setTimeout(() => { status.textContent = ''; }, 2000);
+    return;
+  }
+
+  status.textContent = 'submitting...';
+  status.style.color = 'var(--amber)';
+  document.getElementById('btn-submit-prompt').disabled = true;
+
+  // snapshot feed index BEFORE submitting
+  // so we can show only messages from this run
+  let promptFeedIdx = 0;
+  try {
+    const r = await fetch('/api/feed?since=0');
+    const j = await r.json();
+    promptFeedIdx = j.total;
+  } catch(e) {}
+
+  try {
+    const res  = await fetch('/api/prompt', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ path, prompt })
+    });
+    const json = await res.json();
+    if (json.status !== 'started') {
+      status.textContent = 'error starting pipeline';
+      status.style.color = 'var(--red)';
+      document.getElementById('btn-submit-prompt').disabled = false;
+      return;
+    }
+  } catch(e) {
+    status.textContent = 'could not reach API';
+    status.style.color = 'var(--red)';
+    document.getElementById('btn-submit-prompt').disabled = false;
+    return;
+  }
+
+  status.textContent = 'running — check watcher feed';
+  status.style.color = 'var(--green)';
+
+  // poll independently of watcher state
+  // stops when pipeline finishes or times out
+  const promptPoll = setInterval(async () => {
+    try {
+      const r    = await fetch(`/api/feed?since=${promptFeedIdx}`);
+      const json = await r.json();
+
+      json.messages.forEach(m => {
+        const done = m.tag === 'pass'
+          || m.tag === 'fail'
+          || m.msg.includes('no issues found');
+
+        if (done) {
+          clearInterval(promptPoll);
+          status.textContent = m.tag === 'pass'
+            ? '✓ fix committed'
+            : m.msg.includes('no issues')
+              ? '✓ no issues found'
+              : '✗ failed — check audit logs';
+          status.style.color = m.tag === 'pass'
+            ? 'var(--green)' : 'var(--text-dim)';
+          document.getElementById('btn-submit-prompt').disabled = false;
+        }
+      });
+      promptFeedIdx = json.total;
+    } catch(e) {}
+  }, 2000);
+
+  // safety timeout — 3 minutes
+  setTimeout(() => {
+    clearInterval(promptPoll);
+    if (document.getElementById('btn-submit-prompt').disabled) {
+      status.textContent = 'timed out — check audit logs';
+      status.style.color = 'var(--text-dim)';
+      document.getElementById('btn-submit-prompt').disabled = false;
+    }
+  }, 180000);
+});
+// ═══════════════════════════════════════════════════════
+// REPORT PANEL
+// Calls POST /api/report, shows summary cards + preview
+// Download button saves the markdown as a file
+// ═══════════════════════════════════════════════════════
+let _reportMarkdown = '';
+
+document.getElementById('btn-generate-report').addEventListener('click', async () => {
+  const path  = document.getElementById('report-path').value.trim();
+  const error = document.getElementById('report-error');
+  const btn   = document.getElementById('btn-generate-report');
+
+  if (!path) {
+    error.textContent = 'enter a repository path';
+    error.style.display = 'block';
+    setTimeout(() => { error.style.display = 'none'; }, 2000);
+    return;
+  }
+
+  btn.textContent = '⬡ generating...';
+  btn.disabled    = true;
+
+  try {
+    const res  = await fetch('/api/report', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ path })
+    });
+    const json = await res.json();
+
+    if (json.status === 'error') {
+      error.textContent = json.message;
+      error.style.display = 'block';
+      return;
+    }
+
+    // update summary cards
+    const s = json.summary;
+    document.getElementById('rep-dead').textContent    = s.dead_code;
+    document.getElementById('rep-zombies').textContent = s.zombies;
+    document.getElementById('rep-complex').textContent = s.complex;
+    document.getElementById('rep-fixes').textContent   = s.recent_fixes;
+
+    // show report preview
+    _reportMarkdown = json.report;
+    document.getElementById('report-content').textContent = json.report;
+
+    document.getElementById('report-summary').style.display = 'block';
+    document.getElementById('report-actions').style.display = 'flex';
+    document.getElementById('report-preview').style.display = 'flex';
+
+  } catch(e) {
+    error.textContent = 'could not reach API';
+    error.style.display = 'block';
+  } finally {
+    btn.textContent = '⬡ generate';
+    btn.disabled    = false;
+  }
+});
+
+document.getElementById('btn-download-report').addEventListener('click', () => {
+  if (!_reportMarkdown) return;
+  const blob = new Blob([_reportMarkdown], { type: 'text/markdown' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'proactive-agent-report.md';
+  a.click();
+  URL.revokeObjectURL(url);
+});
 // ═══════════════════════════════════════════════════════
 // STATUS — fetchStatus()
 // Calls GET /api/status to get Neo4j node counts

@@ -55,42 +55,45 @@ def read_source_code(filepath: str) -> str:
     except Exception as e:
         return f"Could not read file: {e}"
 
-def build_prompt(context: dict, source_code: str) -> str:
+def build_prompt(context: dict, source_code: str, user_prompt: str = None) -> str:
     """Build the analyst prompt with injected context."""
     functions_summary = "\n".join([
-        f"  - {f['type']} '{f['name']}' (lines {f['start_line']}-{f['end_line']}, complexity: {f['complexity']})"
-        for f in context["functions"]
-    ])
+    f"  - {f['type']} '{f['name']}' "
+    f"(lines {f['start_line']}-{f['end_line']}, "
+    f"complexity: {f['complexity']}, "
+    f"score: {f.get('complexity_score') or '?'}, "
+    f"flagged: {f.get('is_buggy', False)})"
+    for f in context["functions"]
+])
 
     calls_summary = "\n".join([
         f"  - {c['caller']} → {c['callee']}"
         for c in context["calls"]
     ]) or "  - No call relationships found"
 
-    return f"""You are an expert code analyst specialising in performance and correctness.
+    user_context = ""
+    if user_prompt:
+        user_context = f"""
+USER REQUEST: "{user_prompt}"
+If no runtime error or logic bug exists, focus exclusively on what the user asked for.
 
-You will be given:
-- The file path that changed
-- A list of functions and methods extracted from that file
-- Their call relationships from a dependency graph
-- The full source code of the file
+"""
 
-Your job:
-1. Read each function's source code carefully
-2. Use the call relationships to understand dependencies
-3. Identify ONE issue — either a bug or a performance bottleneck
-4. A performance issue means time complexity worse than O(n log n)
-5. A bug means incorrect logic, unhandled edge case, or guaranteed runtime error
+    return f"""You are an expert code analyst. Analyse the code below and identify ONE issue if any exists.
 
-Before responding, reason through:
-- What is the loop structure of each function?
-- What grows with input size?
-- Are there any edge cases that could cause a crash?
-Then output ONLY the JSON.
+{user_context}
+PRIORITY ORDER — apply strictly, stop at the first match:
+1. RUNTIME ERROR  — raises an exception on EVERY execution
+                    Evidence: exact line and exact exception type
+2. LOGIC BUG      — produces wrong output for a valid input  
+                    Evidence: specific input → wrong output
+3. USER REQUEST   — act on what the user asked for if no bug exists above
+4. COMPLEXITY     — function has O(n²) or worse time complexity
+                    Evidence: identify the nested loops or exponential pattern
 
 FILE: {context['filepath']}
 
-FUNCTIONS AND METHODS:
+FUNCTIONS:
 {functions_summary}
 
 CALL RELATIONSHIPS:
@@ -99,45 +102,36 @@ CALL RELATIONSHIPS:
 SOURCE CODE:
 {source_code}
 
-If you find an issue, respond with ONLY this JSON:
+RESPONSE FORMAT:
+If issue found:
 {{
     "issue_found": true,
-    "issue_type": "bug" | "complexity" | "both",
+    "issue_type": "bug" | "complexity",
     "goal": "one sentence — what the fix must achieve",
-    "description": "2-3 sentences — what is wrong and why",
+    "description": "what is wrong and your evidence",
     "entities_involved": ["exact_function_name"],
     "affected_file": "{context['filepath']}",
     "line_start": 0,
     "line_end": 0,
-    "complexity_before": "O(?)" 
+    "complexity_before": "O(?)"
 }}
 
-If you find NO issue, respond with ONLY:
+If no issue:
 {{
     "issue_found": false
 }}
+RULES:
+- Return raw JSON only — no markdown, no backticks, no explanation.
+- ONE issue maximum — highest priority by the order above.
+- RUNTIME BUG: only flag if the exception fires on EVERY execution regardless of input.
+- LOGIC BUG: only flag if you can state a specific input that produces wrong output.
+- USER REQUEST: if user asked about a specific function, check that function for any issue.
+- COMPLEXITY: any function with complexity_score >= 5 (O(n²) or worse) should be flagged.
+  Also flag any function with nested loops over input-dependent collections even if score is missing.
+  Nested for loops over lists/arrays = O(n²). Flag it.
+- Imports that exist at the top of the file are NOT bugs.
+- When in doubt about bugs: issue_found: false. When in doubt about complexity: flag it."""
 
-CONSTRAINTS:
-- JSON only. No markdown code blocks, no backticks, no explanation, no preamble.
-- Do not wrap the JSON in ```json or ``` tags.
-- Your entire response must be parseable by json.loads() directly.
-- Report only ONE issue — the most severe one.
-- A guaranteed runtime error (NameError, TypeError, IndexError) is MORE severe than complexity issues.
-- If you find both a runtime error AND a complexity issue, report the runtime error first. Do not flag complexity issues for O(n²) or worse.
-- When you flag complexity issues only flag for O(n²) or worse.
-- complexity_before is required for complexity issues, null for bugs.
-- entities_involved must use exact function names as they appear in code.
-- Do not flag functions with complexity O(n log n) or better as complexity issues.
-- Only flag complexity issues for O(n²) or worse.
-- Do not flag functions whose complexity is already O(n) or better as complexity issues.
-- Do not suggest space complexity optimizations — only flag time complexity issues.
-- When scanning for bugs, focus on correctness issues only — not further optimization opportunities.
-- Do not invent issues. If the code is clean, return issue_found: false.
-- If you are not 100% certain there is a real bug, return issue_found: false.
-- Do not flag code as buggy based on naming conventions or style — only flag guaranteed runtime errors.
-- A function that returns a non-boolean value is NOT a bug unless the caller explicitly requires a boolean.
-- When in doubt, return issue_found: false.
-"""
 
 def parse_response(response_text: str) -> dict:
     
@@ -184,7 +178,7 @@ def analyst_agent(state) -> object:
     # check for high complexity
     high_complexity = [
         f for f in context["functions"]
-        if f.get("complexity_score", 0) > 4
+        if (f.get("complexity_score") or 0) > 4
     ]   
 
     # priority: known bugs first, then complexity
@@ -201,6 +195,8 @@ def analyst_agent(state) -> object:
     source_code = read_source_code(state.trigger_file)
 
     # build and send prompt
+    print(f"  [Analyst] User prompt: {state.user_prompt}")
+    prompt = build_prompt(context, source_code, state.user_prompt)  
     prompt = build_prompt(context, source_code)
 
     

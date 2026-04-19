@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import tree_sitter_python as tspython
@@ -331,6 +332,10 @@ def analyze_file_complexity(filepath):
 
 
 def update_complexity_in_graph(filepath):
+    if 'generated_tests' in filepath:
+        return []
+    if os.path.basename(filepath).startswith('test_'):
+        return []
     from db import get_driver
     driver = get_driver()
 

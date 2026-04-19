@@ -1,5 +1,6 @@
 import time
 import sys
+import os
 _recently_committed = {}  # filepath → timestamp
 COMMIT_COOLDOWN = 10      # seconds to ignore a file after committing
 from watchdog.observers import Observer
@@ -16,9 +17,11 @@ _timers = {}
 class CodeChangeHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
-        if event.is_directory:
-            return
         if not event.src_path.endswith('.py'):
+            return
+        if 'generated_tests' in event.src_path:
+            return
+        if os.path.basename(event.src_path).startswith('test_'):
             return
         self._debounce(event.src_path)
 
@@ -26,9 +29,11 @@ class CodeChangeHandler(FileSystemEventHandler):
         _recently_committed[filepath] = time.time()
 
     def on_created(self, event):
-        if event.is_directory:
-            return
         if not event.src_path.endswith('.py'):
+            return
+        if 'generated_tests' in event.src_path:
+            return
+        if os.path.basename(event.src_path).startswith('test_'):
             return
         self._debounce(event.src_path)
 
@@ -40,6 +45,10 @@ class CodeChangeHandler(FileSystemEventHandler):
         t.start()
 
     def _process(self, filepath):
+        if 'generated_tests' in filepath:
+            return
+        if os.path.basename(filepath).startswith('test_'):
+            return
         try:
             from api import add_feed_message
             add_feed_message('info', f'change detected: <strong>{filepath}</strong>')
@@ -62,11 +71,11 @@ class CodeChangeHandler(FileSystemEventHandler):
             return
         write_graph(result)
 
-        # complexity_analysr
+        # next, the complexity_analyzer updates complexity 
         from complexity_analyzer import update_complexity_in_graph
         update_complexity_in_graph(filepath)
 
-        # step 3 — fire pipeline
+        # the orchestrator fire pipeline
         from orchestrator import run_pipeline
         run_pipeline(filepath)
     

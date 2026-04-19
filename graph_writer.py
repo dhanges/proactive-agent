@@ -1,4 +1,5 @@
 from db import get_driver
+import os
 
 def write_file_node(tx, filepath):
     tx.run("""
@@ -113,6 +114,11 @@ def cleanup_stale_nodes(filepath: str, current_function_names: list):
 def write_graph(parsed_data):
     driver = get_driver()
     filepath = parsed_data["filepath"]
+    filepath = parsed_data.get('filepath', '')
+    if 'generated_tests' in filepath:
+        return
+    if os.path.basename(filepath).startswith('test_'):
+        return
 
     if parsed_data["error"]:
         print(f"  Skipping {filepath} — parse error: {parsed_data['error']}")
