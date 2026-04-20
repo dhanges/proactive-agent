@@ -70,11 +70,14 @@ def write_has_member(tx, class_name, method_name, filepath):
 
 def write_calls(tx, caller_name, caller_class, callee_name, filepath):
     tx.run("""
-        MATCH (caller:Method {name: $caller, class: $caller_class, file: $file})
-        MATCH (callee:Method {name: $callee})
+        MATCH (caller)
+        WHERE caller.name = $caller AND caller.file = $file
+        AND (caller:Function OR caller:Method)
+        MATCH (callee)
+        WHERE callee.name = $callee
+        AND (callee:Function OR callee:Method)
         MERGE (caller)-[:CALLS]->(callee)
     """, caller=caller_name,
-         caller_class=caller_class,
          callee=callee_name,
          file=filepath)
 
@@ -111,33 +114,19 @@ def cleanup_stale_nodes(filepath: str, current_function_names: list):
                     DETACH DELETE n
                 """, filepath=filepath, name=name)
 
-def write_graph(parsed_data):
+def write_relationships(parsed_data):
+    """Write all relationships after all nodes exist."""
     driver = get_driver()
     filepath = parsed_data["filepath"]
-    filepath = parsed_data.get('filepath', '')
+    
     if 'generated_tests' in filepath:
         return
     if os.path.basename(filepath).startswith('test_'):
         return
-
     if parsed_data["error"]:
-        print(f"  Skipping {filepath} — parse error: {parsed_data['error']}")
         return
 
     with driver.session() as session:
-
-        # pass 1 — all nodes
-        session.execute_write(write_file_node, filepath)
-
-        for cls in parsed_data["classes"]:
-            session.execute_write(write_class, cls, filepath)
-            for method in cls["methods"]:
-                session.execute_write(write_method, method, cls["name"], filepath)
-
-        for fn in parsed_data["functions"]:
-            session.execute_write(write_function, fn, filepath)
-
-        # pass 2 — all relationships
         for cls in parsed_data["classes"]:
             for parent in cls["superclasses"]:
                 session.execute_write(write_inherits, cls["name"], parent, filepath)
@@ -146,9 +135,32 @@ def write_graph(parsed_data):
                 session.execute_write(write_file_contains, filepath, cls["name"], "Class")
                 for call in method["calls"]:
                     session.execute_write(write_calls, method["name"], cls["name"], call, filepath)
-
         for fn in parsed_data["functions"]:
             session.execute_write(write_file_contains, filepath, fn["name"], "Function")
+            for call in fn.get("calls", []):
+                session.execute_write(write_calls, fn["name"], None, call, filepath)
+
+def write_graph(parsed_data):
+    """Write nodes only — call write_relationships separately after all nodes exist."""
+    driver = get_driver()
+    filepath = parsed_data["filepath"]
+    
+    if 'generated_tests' in filepath:
+        return
+    if os.path.basename(filepath).startswith('test_'):
+        return
+    if parsed_data["error"]:
+        print(f"  Skipping {filepath} — parse error: {parsed_data['error']}")
+        return
+
+    with driver.session() as session:
+        session.execute_write(write_file_node, filepath)
+        for cls in parsed_data["classes"]:
+            session.execute_write(write_class, cls, filepath)
+            for method in cls["methods"]:
+                session.execute_write(write_method, method, cls["name"], filepath)
+        for fn in parsed_data["functions"]:
+            session.execute_write(write_function, fn, filepath)
 
     print(f"  Written: {filepath} — {len(parsed_data['classes'])} classes, {len(parsed_data['functions'])} functions")
     current_names = (

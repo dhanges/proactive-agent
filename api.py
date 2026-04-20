@@ -361,15 +361,23 @@ def get_dead_code(path: str):
         driver = get_driver()
         with driver.session() as session:
             result = session.run("""
+               OPTIONAL MATCH (entry)-[:CALLS*1..10]->(reachable)
+                WHERE entry.file STARTS WITH $path
+                AND entry.name IN ['__init__', 'main', 'run', 'setup', 'start']
+                WITH collect(DISTINCT reachable.name) AS reachable_names
+
+    
                 MATCH (n)
                 WHERE (n:Function OR n:Method)
                 AND n.file STARTS WITH $path
                 AND NOT (()-[:CALLS]->(n))
-                AND NOT n.name IN ['__init__', '__str__', '__repr__', 
-                                   '__len__', '__eq__', 'main', '__new__']
+                AND NOT n.name IN ['__init__', '__str__', '__repr__',
+                       '__len__', '__eq__', 'main', '__new__',
+                       'run', 'setup', 'start']
                 AND NOT n.name STARTS WITH 'test_'
+                AND NOT n.name IN reachable_names
                 RETURN n.name AS name, n.file AS file,
-                       n.start_line AS line
+                n.start_line AS line
                 ORDER BY n.file, n.start_line
             """, path=path)
             rows = [dict(r) for r in result]
@@ -477,15 +485,21 @@ def generate_report(req: ScanRequest):
         # ── Dead code ─────────────────────────────────────────────
         with driver.session() as session:
             result = session.run("""
+                OPTIONAL MATCH (entry)-[:CALLS*1..10]->(reachable)
+                WHERE entry.file STARTS WITH $path
+                AND entry.name IN ['__init__', 'main', 'run', 'setup', 'start']
+                WITH collect(DISTINCT reachable.name) AS reachable_names
                 MATCH (n)
                 WHERE (n:Function OR n:Method)
                 AND n.file STARTS WITH $path
                 AND NOT (()-[:CALLS]->(n))
                 AND NOT n.name IN ['__init__', '__str__', '__repr__',
-                                   '__len__', '__eq__', 'main', '__new__']
+                                  '__len__', '__eq__', 'main', '__new__',
+                                   'run', 'setup', 'start']
                 AND NOT n.name STARTS WITH 'test_'
+                AND NOT n.name IN reachable_names
                 RETURN n.name AS name, n.file AS file,
-                       n.start_line AS line
+                n.start_line AS line
                 ORDER BY n.file, n.start_line
             """, path=path)
             dead_code = [dict(r) for r in result]

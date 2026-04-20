@@ -23,6 +23,7 @@ def find_python_files(directory):
 def crawl(directory):
     print(f"Crawling: {directory}")
     print("─" * 40)
+    
     print("Phase 0: Clearing existing graph...")
     from db import get_driver
     driver = get_driver()
@@ -44,7 +45,7 @@ def crawl(directory):
     print(f"Found {len(files)} Python files\n")
     parsed_results = []
 
-    # Phase 1 — parse all files first(pass2)
+    # parse all files first
     print("Phase 1: Parsing all files...")
     for filepath in files:
         result = parse_file(filepath)
@@ -56,10 +57,13 @@ def crawl(directory):
                   f"{len(result['classes'])} classes, "
                   f"{len(result['functions'])} functions")
 
-    # write all nodes and relationship(pass1)
-    print("\nPhase 2: Writing to Neo4j...")
+    # write all nodes and relationship(pass1 and 2)
+    print("\nPhase 2: Writing nodes to Neo4j...")
     for result in parsed_results:
         write_graph(result)
+    from graph_writer import write_relationships
+    for result in parsed_results:
+        write_relationships(result)
 
     print("\nPhase 3: Analysing complexity...")
     from complexity_analyzer import update_complexity_in_graph
